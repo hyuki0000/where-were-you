@@ -1,4 +1,4 @@
-# where-were-you
+# Where were you?
 
 This tiny app ("Where were you?") saves your current position periodically in your browser's local storage.
 
