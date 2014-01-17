@@ -5,26 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <link rel="apple-touch-icon" href="where.png" />
+    <link rel="apple-touch-icon" href="logo.png" />
     <title>Where were you?</title>
     <script type="text/javascript" src="http://maps.google.com/maps/api/js?sensor=false"></script>
     <script type="text/javascript" src="where.js"></script>
   </head>
   <body style="background-color:white" >
     <div id="map" style="width:100%; height:200px"></div>
+    Register this place as <input type="text" value="Place A" id="place" />. <input type="button" id="register" value="Register" /><br />
+    <input type="button" id="show" value="Show Current Position" /><br />
 
-    <h2>Register Place</h2>
-    <input type="text" value="Place A" id="place" /><input type="button" id="register" value="Register Place" /><br />
+    <input type="button" id="deletePlaces" value="Delete All Places" />
+    <p id="places"></p>
 
-    <h2>Places</h2>
-    <input type="button" id="deletePlaces" value="Delete Places" />
-    <ul id="places"></ul>
+    <input type="button" id="deleteRecords" value="Delete All Records" />
+    <pre id="records"></pre>
 
-    <h2>Records</h2>
-    <input type="button" id="deleteRecords" value="Delete Records" />
-    <ul id="records"></ul>
+    <input type="button" id="reload" value="Reload This App" /><br />
 
-    <h2>Debug</h2>
     <input type="button" id="clearDebug" value="Clear Debug" />
     <pre id="debug"></pre>
   </body>
