@@ -20,27 +20,33 @@ var Where = {
     alert(msg);
   },
 
+  formatDate: function (value) {
+    var t = new Date(value);
+    var d = [
+      t.getFullYear(),
+      t.getMonth() + 1,
+      t.getDay(),
+      t.getHours(),
+      t.getMinutes(),
+      t.getSeconds()
+    ].map(function (s) {
+      return s < 10 ? '0' + s : '' + s;
+    });
+    return d[0] + '-' + d[1] + '-' + d[2] + ' ' + d[3] + ':' + d[4] + ':' + d[5];
+  },
+
   // Events
  
   onLoad: function() {
     "use strict";
     Where.debug('application started.');
-    Where.initMap();
     Where.initRecords();
     Where.initPlaces();
-    if (navigator.geolocation) {
-      Where.debug('Geo Location API is supported.');
-      // navigator.geolocation.getCurrentPosition(success, error);
-      Where.watchid = navigator.geolocation.watchPosition(
-          Where.watchPosition,
-          Where.watchError,
-          Where.watchOption
-      );
-      Where.debug('watchPosition returns ' + Where.watchid);
-    } else {
-      Where.error('Geo Location API is not supported.');
-    }
+    Where.initWatch();
     document.getElementById("register").onclick = Where.onRegister;
+    document.getElementById("show").onclick = function (e) {
+      Where.showPosition();
+    };
     document.getElementById("clearDebug").onclick = function (e) {
       document.getElementById("debug").innerHTML = '';
     };
@@ -53,6 +59,9 @@ var Where = {
       Where.records = [];
       localStorage.setItem('records', JSON.stringify(Where.records));
       Where.updateDisplay();
+    };
+    document.getElementById("reload").onclick = function (e) {
+      window.location.reload();
     };
   },
 
@@ -77,17 +86,12 @@ var Where = {
   // View
 
   updateDisplay: function () {
-    document.getElementById("records").innerHTML = Where.records.map(function(obj) {
-      return "<li>" + JSON.stringify(obj) + "</li>";
-    }).join('');
-    document.getElementById("places").innerHTML = Where.places.map(function(obj) {
-      return "<li>" + JSON.stringify(obj) + "</li>";
-    }).join('');
-  },
-
-  initMap: function () {
-    document.getElementById("map").style.height = 100;
-    document.getElementById("map").style.width = 100;
+    document.getElementById("records").innerHTML = Where.records.map(function(record) {
+      return Where.formatDate(record.time) + ' ' + record.place;
+    }).join("\n");
+    document.getElementById("places").innerHTML = Where.places.map(function(place) {
+      return place.place;
+    }).join(" / ");
   },
 
   // Model
@@ -113,14 +117,27 @@ var Where = {
 
   appendRecord: function (obj) {
     Where.records.unshift(obj);
-    // Where.debug("appendRecord: " + JSON.stringify(obj));
     localStorage.setItem('records', JSON.stringify(Where.records));
     Where.updateDisplay();
   },
 
+  appendPosition: function (pos) {
+    var now = new Date();
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    var place = Where.guessPlace(lat, lng);
+    Where.showMap(lat, lng);
+    Where.appendRecord({
+      place: place,
+      time: now.getTime(),
+      latitude: lat,
+      longitude: lng,
+      timeISOString: now.toISOString()
+    });
+  },
+
   appendPlace: function (obj) {
     Where.places.unshift(obj);
-    Where.debug("appendPlace: " + JSON.stringify(obj));
     localStorage.setItem('places', JSON.stringify(Where.places));
     Where.updateDisplay();
   },
@@ -142,22 +159,48 @@ var Where = {
 
   // Geolocation
  
-  watchid: -1,
+  watchid: 0,
+  lastWatchedTime: 0,
+
+  initWatch: function () {
+    Where.debug('initWatch: called.');
+    if (navigator.geolocation) {
+      Where.debug('Geo Location API is supported.');
+      Where.watchid = navigator.geolocation.watchPosition(
+          Where.watchPosition,
+          Where.watchError,
+          Where.watchOption
+      );
+      Where.debug('watchPosition returns ' + Where.watchid);
+    } else {
+      Where.error('Geo Location API is not supported.');
+    }
+  },
+
+  showPosition: function () {
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        Where.debug('showPosition: called.');
+        Where.appendPosition(pos);
+      },
+      function (error) {
+        Where.debug('showPosition: getCurrentPosition returns ' + error.message);
+      }
+    );
+  },
 
   watchPosition: function (pos) {
-    var now = new Date();
-    var lat = pos.coords.latitude;
-    var lng = pos.coords.longitude;
-    var place = Where.guessPlace(lat, lng);
-    Where.debug('(latitude, longitude) = (' + lat + ', ' + lng + ')');
-    Where.showMap(lat, lng);
-    Where.appendRecord({
-      place: place,
-      time: now.getTime(),
-      latitude: lat,
-      longitude: lng,
-      timeISOString: now.toISOString()
-    });
+    // Where.debug('watchPosition: called.');
+    // FIXME: Sometimes watchPostion is called very frequently (Once in 1 sec).
+    if (Where.lastWatchedTime + 60000 < pos.time) {
+      // Where.debug('watchPosition: appended.');
+      Where.appendPosition(pos);
+    } else {
+      Where.debug('watchPosition: ignored.');
+    }
+    // Where.debug('watchPosition: clearWatch');
+    // navigator.geolocation.clearWatch(Where.watchid);
+    // window.setTimeout(Where.initWatch, 10000);
   },
 
   watchError: function (error) {
@@ -178,9 +221,9 @@ var Where = {
   },
 
   watchOption: {
-    enableHighAccuracy: true,
-    timeout: 60000,
-    maximumAge: 60000
+    enableHighAccuracy: false,
+    timeout: 10000,
+    maximumAge: 10000,
   },
 
   // Map
@@ -191,27 +234,35 @@ var Where = {
 
   showMap: function (lat, lng) {
     var latlng = new google.maps.LatLng(lat, lng);
-    Where.map = new google.maps.Map(
-      document.getElementById('map'), {
-        zoom: 15,
-        center: latlng,
-        mapTypeControl: false,
-        streetViewControl: false,
-        navigationControlOptions: {
-          style: google.maps.NavigationControlStyle.SMALL
-        },
-        mapTypeId: google.maps.MapTypeId.ROADMAP
-    });
+    if (Where.map === null) {
+      Where.map = new google.maps.Map(
+        document.getElementById('map'), {
+          zoom: 15,
+          center: latlng,
+          mapTypeControl: false,
+          streetViewControl: false,
+          navigationControlOptions: {
+            style: google.maps.NavigationControlStyle.SMALL
+          },
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+      });
+    }
 
-    Where.marker = new google.maps.Marker({
-      clickable: false,
-      draggable: false,
-      flat: false,
-      map: Where.map,
-      position: latlng,
-      visible: true
-    });
+    if (Where.marker === null) {
+      Where.marker = new google.maps.Marker({
+        clickable: false,
+        draggable: false,
+        flat: false,
+        map: Where.map,
+        position: latlng,
+        visible: true
+      });
+    }
+
+    Where.marker.setPosition(latlng);
+
   },
+
   terminator: null
 };
 
